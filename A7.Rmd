@@ -1,0 +1,287 @@
+---
+title: "DA A7"
+author: "Xuyang Bai"
+date: "3/27/2018"
+output:
+
+
+
+---
+# Reference: Here are some code help that I looked over, when writing this file. I change a lot of them from the original code. But I keep those which works well for my dataset.Many thanks to all of them. 
+http://www-bcf.usc.edu/~gareth/ISL/All%20Labs.txt
+Galit Shmueli, Peter C. Bruce, Inbal Yahav, Nitin R. Patel, Kenneth C. Lichtendahl Jr.-Data Mining for Business Analytics_ Concepts, Techniques, and Applications in R-Wiley (2017)
+http://archive.ics.uci.edu/ml/datasets/Wine+Quality
+
+# Exploratory Data Analysis (3%)
+# Explore the statistical aspects of both datasets. 
+```{r}
+library(readr)
+redwine <- read_delim("winequality-red.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+white <- read_delim("winequality-white.csv", 
+     ";", escape_double = FALSE, trim_ws = TRUE)
+summary(redwine$pH)
+summary(redwine$sulphates)
+summary(redwine$quality)
+summary(redwine$`fixed acidity`)
+summary(redwine$chlorides)
+summary(redwine$`residual sugar`)
+
+par(mfrow = c(3, 3))
+plot(redwine$pH, redwine$quality)
+plot(redwine$sulphates,redwine$quality)
+plot(redwine$`fixed acidity`, redwine$quality)
+plot(redwine$`volatile acidity`,redwine$quality)
+plot(redwine$`residual sugar`, redwine$quality)
+plot(redwine$`citric acid`,redwine$quality)
+plot(redwine$density, redwine$quality)
+plot(redwine$alcohol,redwine$quality)
+plot(redwine)
+cor(redwine)
+
+par(mfrow = c(2, 2))
+plot(white$pH, white$quality)
+plot(white$sulphates,white$quality)
+plot(white$`fixed acidity`, white$quality)
+plot(white$`volatile acidity`,white$quality)
+plot(white$`residual sugar`, white$quality)
+plot(white$`citric acid`,white$quality)
+plot(white$density, white$quality)
+plot(white$alcohol,white$quality)
+plot(white)
+# cor(white)
+# plot(white$density)
+```
+Fixed acidity is highly positively correlated with citric acid. Fixed acidity and citric acid are highly negatively correlated with pH. I want to create a new feature "combined acidity" using "fixed acidity", "citric acid", and "pH".
+
+# Perform any cleaning, transformations, interpolations, smoothing, outlier detection/removal, etc. required on the data. 
+```{r}
+white<-na.omit(white)
+redwine<-na.omit(redwine)
+redwine$CombinedAcidity<-redwine$`fixed acidity`+redwine$`citric acid`-redwine$pH
+white$CombinedAcidity<-white$`fixed acidity`+white$`citric acid`-white$pH
+g<-lm(redwine$quality~redwine$CombinedAcidity+redwine$`volatile acidity`+redwine$`residual sugar`+redwine$chlorides+redwine$`free sulfur dioxide`+redwine$`total sulfur dioxide`+redwine$density+redwine$sulphates+redwine$alcohol)
+nrow(redwine)
+F.crit.val = qf(0.95,9,1599-9)
+plot(cooks.distance(g), pch=3,  xlim=c(10,1550),ylim=c(0.01,2), main="Cook's Distance")
+abline(h=F.crit.val, col="red")
+```
+
+```{r}
+par(mfrow = c(1, 2))
+plot(redwine$quality)
+plot(white$quality)
+```
+
+# Include figures and descriptions of this exploration and a short description of what you concluded (e.g. nature of distribution, indication of suitable model approaches you would try, etc.). Min. 3/4 page text + graphics (required).
+
+
+# 2. Model Development, Validation, Optimization and Tuning (14%) Choose two (4000-level) or three (6000-level) or more models. Explain why you chose them. Construct the models, test and validate them. Explain the validation approach. You can use any method(s) covered in the course. Compare model results if applicable. Report the results of the model fits (coefficients, graphs, trees, etc.), predictors, and statistics. Min. 3 pages of text + graphics (required). 4000-level will receive extra credit for 6000-level responses.
+```{r}
+# training (50%), validation (30%), test (20%)
+train.rows <- sample(rownames(redwine), dim(redwine)[1]*0.5)
+valid.rows <- sample(setdiff(rownames(redwine), train.rows),
+dim(redwine)[1]*0.3)
+test.rows <- setdiff(rownames(redwine), union(train.rows, valid.rows))
+train.data <- redwine[train.rows, ]
+valid.data <- redwine[valid.rows, ]
+test.data <- redwine[test.rows, ]
+
+
+#White
+trainW.rows <- sample(rownames(white), dim(white)[1]*0.5)
+validW.rows <- sample(setdiff(rownames(white), train.rows),
+dim(white)[1]*0.3)
+testW.rows <- setdiff(rownames(white), union(trainW.rows, validW.rows))
+trainW.data <- white[trainW.rows, ]
+validW.data <- white[validW.rows, ]
+testW.data <- white[testW.rows, ]
+```
+
+
+
+```{r}
+redwine.test=test.data[,"quality"]
+redwine.valid=valid.data[,"quality"]
+#Fitting regression model using multivariable linear model
+G<-lm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+density+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+sulphates+alcohol,data=train.data)
+summary(G)
+yhat.linearValid=predict(G,newdata=valid.data)
+print(LinearValidMSE<-mean((yhat.linearValid-redwine.valid)^2))
+G1<-lm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+poly(alcohol,3),data=train.data)
+yhat1.linearValid=predict(G1,newdata=valid.data)
+print(LinearValidMSE<-mean((yhat1.linearValid-redwine.valid)^2))
+G2<-lm(quality~CombinedAcidity+alcohol+`volatile acidity`+`residual sugar`*density+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+sulphates,data=train.data)
+yhat2.linearValid=predict(G,newdata=valid.data)
+print(LinearValidMSE<-mean((yhat2.linearValid-redwine.valid)^2))
+yhat.linearTest=predict(G,newdata=test.data)
+print(LinearTestMSE<-mean((yhat.linearTest-redwine.test)^2))
+df1<-cbind(yhat.linearTest,redwine.test)
+View(df1)
+plot(df1$yhat.linearTest,pch=11,col=2,xlab = "Observations", ylab = "Quality")
+par(new=TRUE)
+plot(df1$quality,col=3,axes = FALSE,xlab = "", ylab = "")
+
+# Fitting Regression Trees Using Boosting
+library(gbm)
+set.seed(1)
+train.data<-na.omit(train.data)
+Boosting.redwine=gbm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=train.data,distribution="gaussian",n.trees=5000,interaction.depth=8,cv.folds=6,shrinkage=0.2,verbose=F)
+best.iter<-gbm.perf(Boosting.redwine, 
+         plot.it = TRUE, 
+         oobag.curve = FALSE, 
+         overlay = TRUE, 
+         method="cv")
+print(best.iter)
+Boosting.redwine=gbm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=train.data,distribution="gaussian",n.trees=35,interaction.depth=8,cv.folds=6,shrinkage=0.2,verbose=F)
+summary(Boosting.redwine)
+yhat.boostValid=predict(Boosting.redwine,newdata=valid.data,n.trees=35)
+print(BoostValidMSE<-mean((yhat.boostValid-redwine.valid)^2))
+df1W<-cbind(yhat.boostValid,redwine.valid)
+plot(df1W$yhat.boostValid,pch=11,col=2,xlab = "Red wine,Observations, Boosted", ylab = "Quality")
+par(new=TRUE)
+plot(df1W$quality,col=3,axes = FALSE,xlab = "", ylab = "")
+```
+
+White wine
+```{r}
+white.test=testW.data[,"quality"]
+white.valid=validW.data[,"quality"]
+#Fitting regression model using multivariable linear model
+GW<-lm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+density+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+sulphates+alcohol,data=trainW.data)
+summary(GW)
+yhatW.linearValid=predict(G,newdata=validW.data)
+print(LinearValidWMSE<-mean((yhatW.linearValid-white.valid)^2))
+G1W<-lm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+poly(alcohol,3),data=trainW.data)
+yhat1W.linearValid=predict(G1W,newdata=validW.data)
+print(LinearValidWMSE<-mean((yhat1W.linearValid-white.valid)^2))
+G2W<-lm(quality~CombinedAcidity+alcohol+`volatile acidity`+`residual sugar`*density+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+sulphates,data=trainW.data)
+yhat2.linearValid=predict(G2W,newdata=validW.data)
+print(LinearValidMSE<-mean((yhat2.linearValid-redwine.valid)^2))
+yhatW.linearTest=predict(GW,newdata=testW.data)
+print(LinearWTestMSE<-mean((yhatW.linearTest-white.test)^2))
+df1W<-cbind(yhatW.linearTest,white.test)
+View(df1W)
+plot(df1W$yhatW.linearTest,pch=11,col=2,xlab = "White wine,Observations", ylab = "Quality")
+par(new=TRUE)
+plot(df1W$quality,col=3,axes = FALSE,xlab = "", ylab = "")
+```
+```{r}
+# Fitting Regression Trees Using Boosting
+Boosting.white=gbm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=trainW.data,distribution="gaussian",n.trees=5000,interaction.depth=8,cv.folds=6,shrinkage=0.2,verbose=F)
+best.iter<-gbm.perf(Boosting.white, 
+         plot.it = TRUE, 
+         oobag.curve = FALSE, 
+         overlay = TRUE, 
+         method="cv")
+print(best.iter)
+Boosting.white=gbm(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=trainW.data,distribution="gaussian",n.trees=best.iter,interaction.depth=8,cv.folds=6,shrinkage=0.2,verbose=F)
+summary(Boosting.white)
+yhatW.boostValid=predict(Boosting.white,newdata=validW.data,n.trees=best.iter)
+print(BoostValidMSE<-mean((yhatW.boostValid-white.valid)^2))
+df1W<-cbind(yhatW.boostValid,white.valid)
+plot(df1W$yhatW.boostValid,pch=11,col=2,xlab = "White wine,Observations", ylab = "Quality")
+par(new=TRUE)
+plot(df1W$quality,col=3,axes = FALSE,xlab = "", ylab = "")
+```
+
+```{r}
+#Fitting regression mode using partial least squares(PLS)
+x=model.matrix(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,redwine)[,-1]
+y=redwine$quality
+set.seed(1)
+library(pls)
+pls.fit=plsr(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=train.data,scale=TRUE, validation="CV")
+summary(pls.fit)
+validationplot(pls.fit,val.type="R2")
+pls.fit=plsr(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=redwine,scale=TRUE,ncomp=1)
+pls.pred.valid=predict(pls.fit,valid.data,ncomp=1)
+print(PlsMse<-mean((pls.pred.valid-redwine.test)^2))
+summary(pls.fit)
+```
+White
+```{r}
+#Fitting regression mode using partial least squares(PLS)
+xW=model.matrix(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,white)[,-1]
+yW=white$quality
+plsW.fit=plsr(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=trainW.data,scale=TRUE, validation="CV")
+summary(plsW.fit)
+validationplot(plsW.fit,val.type="R2")
+plsW.fit=plsr(quality~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=white,scale=TRUE,ncomp=1)
+plsW.pred.valid=predict(plsW.fit,validW.data,ncomp=1)
+print(PlsMse<-mean((plsW.pred.valid-white.test)^2))
+summary(plsW.fit)
+```
+
+```{r}
+# Compare results
+print(LinearTestMSE<-mean((yhat.linearTest-redwine.test)^2))
+print(BoostValidMSE<-mean((yhat.boostValid-redwine.valid)^2))
+print(PlsMse<-mean((pls.pred.valid-redwine.test)^2))
+print(LinearWTestMSE<-mean((yhatW.linearTest-white.test)^2))
+print(BoostValidMSE<-mean((yhatW.boostValid-white.valid)^2))
+print(PlsMse<-mean((plsW.pred.valid-white.test)^2))
+```
+
+# 3. Decisions (3%)
+# Describe your conclusions in regard to the model fit, prediction and how well (or not) it could be used for decisions and why. Min.3/4 page of text+graphics.
+Boosting has the smallest MSE, compared to boosting and partial least squares. 
+# model 4: logistic regression, multi class
+```{r}
+library(nnet)
+mult.cere<-multinom(Y ~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=redwine)
+summary(mult.cere)
+mult.cere1<-update(mult.cere,~.-1)
+mult.cere2<-update(mult.cere,~.-CombinedAcidity)
+mult.cere3<-update(mult.cere,~.-`volatile acidity`)
+mult.cere4<-update(mult.cere,~.-alcohol)
+anova(mult.cere,mult.cere1)
+anova(mult.cere,mult.cere2)
+anova(mult.cere,mult.cere3)
+anova(mult.cere,mult.cere4)
+step.cere<-step(mult.cere)  
+help("step")
+summary(step.cere)
+exp(coef(step.cere))
+cere.pred<-predict(step.cere) 
+cere.pred
+print(confusionMatrix<-table(Y,cere.pred))
+print(AccuracyRate<-(1+1+516+390+55)/(1+7+1+35+17+156+207+5+12+41+132+10+8+1+1+516+390+55))
+n<-table(Y,cere.pred);n  
+print(n)
+Category<-levels(Y)
+Percantage<-c(n[1,1]/sum(n[1,]),n[2,2]/sum(n[2,]),n[3,3]/sum(n[3,]))
+rbind(Category,Percantage)
+cere.pred2<-predict(step.cere,type="p")
+cere.pred2
+```
+```{r}
+Y<-factor(white$quality, ordered=TRUE)
+library(nnet)
+mult.cere<-multinom(Y ~CombinedAcidity+`volatile acidity`+`residual sugar`+chlorides+`free sulfur dioxide`+`total sulfur dioxide`+density+sulphates+alcohol,data=white)
+summary(mult.cere)
+mult.cere1<-update(mult.cere,~.-1)
+mult.cere2<-update(mult.cere,~.-CombinedAcidity)
+mult.cere3<-update(mult.cere,~.-`volatile acidity`)
+mult.cere4<-update(mult.cere,~.-alcohol)
+anova(mult.cere,mult.cere1)
+anova(mult.cere,mult.cere2)
+anova(mult.cere,mult.cere3)
+anova(mult.cere,mult.cere4)
+step.cere<-step(mult.cere)  
+help("step")
+summary(step.cere)
+exp(coef(step.cere))
+cere.pred<-predict(step.cere) 
+cere.pred
+print(confusionMatrix<-table(Y,cere.pred))
+print(AccuracyRate<-(2+6+784+1657+177)/(8+10+91+63+3+664+7+135+51+113+664+11+39+403+2+2+1+2+6+784+1657+177))
+n<-table(Y,cere.pred);n  
+print(n)
+Category<-levels(Y)
+Percantage<-c(n[1,1]/sum(n[1,]),n[2,2]/sum(n[2,]),n[3,3]/sum(n[3,]))
+rbind(Category,Percantage)
+cere.pred2<-predict(step.cere,type="p")
+cere.pred2
+```
+
